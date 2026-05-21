@@ -134,4 +134,24 @@ public class PostController {
             return ResponseEntity.ok(Map.of("likes", post.getLikesCount(), "isLiked", false));
         }).orElse(ResponseEntity.notFound().build());
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deletePost(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String userDoc = body.get("userDocumento");
+        if (userDoc == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "userDocumento obrigatório"));
+        }
+
+        return postRepository.findById(id).map(post -> {
+            if (!post.getUserDocumento().equals(userDoc)) {
+                return ResponseEntity.status(403).body(Map.of("error", "Você não tem permissão para deletar este post"));
+            }
+
+            commentRepository.deleteByPostId(id);
+            likeRepository.deleteByPostId(id);
+            postRepository.delete(post);
+
+            return ResponseEntity.ok(Map.of("message", "Post deletado com sucesso"));
+        }).orElse(ResponseEntity.notFound().build());
+    }
 }

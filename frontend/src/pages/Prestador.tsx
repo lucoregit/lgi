@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import PostCard from '../components/PostCard'
 
 export default function Prestador(){
   const { id } = useParams()
@@ -8,6 +9,21 @@ export default function Prestador(){
   const [provider, setProvider] = useState<any>((loc.state as any)?.provider || null)
   const [loading, setLoading] = useState(!provider)
   const [posts, setPosts] = useState<any[]>([])
+
+  const fetchUserPosts = (userId: string) => {
+    const doc = localStorage.getItem('documento')
+    const url = doc ? `http://localhost:8080/api/posts/user/${encodeURIComponent(userId)}?currentUser=${doc}` : `http://localhost:8080/api/posts/user/${encodeURIComponent(userId)}`
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        setPosts(data)
+        setLoading(false)
+      })
+      .catch(err => {
+        console.error('Erro ao buscar posts:', err)
+        setLoading(false)
+      })
+  }
 
   useEffect(() => {
     if (id) {
@@ -38,21 +54,13 @@ export default function Prestador(){
         })
         .catch(err => console.error('Erro ao buscar prestador:', err))
 
-      // Buscar posts do usuário
-      const doc = localStorage.getItem('documento')
-      const url = doc ? `http://localhost:8080/api/posts/user/${encodeURIComponent(id)}?currentUser=${doc}` : `http://localhost:8080/api/posts/user/${encodeURIComponent(id)}`
-      fetch(url)
-        .then(r => r.json())
-        .then(data => {
-          setPosts(data)
-          setLoading(false)
-        })
-        .catch(err => {
-          console.error('Erro ao buscar posts:', err)
-          setLoading(false)
-        })
+      fetchUserPosts(id)
     }
   }, [id])
+
+  const handlePostDeleted = (postId: number) => {
+    setPosts(posts.filter(p => p.id !== postId))
+  }
 
   const calculateAge = (birthDate?: string) => {
     if (!birthDate) return null
@@ -123,6 +131,10 @@ export default function Prestador(){
                 </div>
                 <div className="stats-grid">
                   <div className="stat-item">
+                    <span className="stat-label">📍 Localização</span>
+                    <span className="stat-value muted">Não informada</span>
+                  </div>
+                  <div className="stat-item">
                     <span className="stat-label">Idade</span>
                     <span className="stat-value">{calculateAge(provider.dataNasc) || '--'} anos</span>
                   </div>
@@ -159,18 +171,44 @@ export default function Prestador(){
             <h4>Publicações</h4>
             <div className="profile-posts-grid">
               {posts.length > 0 ? (
-                posts.map(p => (
-                  <div key={p.id} className="profile-post-thumb">
-                    {p.mediaType === 'image' ? (
-                      <img src={p.mediaContent} alt="Post" />
-                    ) : (
-                      <div className="video-thumb">
-                        <video src={p.mediaContent} />
-                        <div className="video-icon">▶</div>
+                posts.map(p => {
+                  const currentUserDoc = localStorage.getItem('documento')
+                  const isOwner = currentUserDoc === p.userDocumento
+
+                  if (isOwner) {
+                    return (
+                      <div key={p.id} style={{ gridColumn: '1 / -1' }}>
+                        <PostCard post={p} onPostDeleted={handlePostDeleted} />
                       </div>
-                    )}
-                  </div>
-                ))
+                    )
+                  }
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="profile-post-thumb"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/posts/${p.id}`)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/posts/${p.id}`)
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {p.mediaType === 'image' ? (
+                        <img src={p.mediaContent} alt="Post" />
+                      ) : (
+                        <div className="video-thumb">
+                          <video src={p.mediaContent} />
+                          <div className="video-icon">▶</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
               ) : (
                 <p className="empty-msg">Este usuário ainda não tem publicações.</p>
               )}

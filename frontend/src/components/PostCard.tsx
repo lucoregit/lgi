@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import ReactDOM from 'react-dom'
 
 type Post = {
   id: number
@@ -7,20 +8,28 @@ type Post = {
   userName?: string
   likesCount?: number
   isLikedByUser?: boolean
+  likedByUser?: boolean
   mediaContent: string
   mediaType: 'image' | 'video'
   descricao: string
   createdAt: string
 }
 
-export default function PostCard({ post }: { post: Post }) {
+export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDeleted?: (postId: number) => void }) {
   const navigate = useNavigate()
-  const [liked, setLiked] = useState(post.isLikedByUser || false)
+  const initialLiked = post.isLikedByUser ?? post.likedByUser ?? false
+  const [liked, setLiked] = useState(initialLiked)
   const [likes, setLikes] = useState(post.likesCount || 0)
   
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false)
+  const [showReportToast, setShowReportToast] = useState(false)
+  const [toastExiting, setToastExiting] = useState(false)
+
+  const currentUser = localStorage.getItem('documento')
+  const isOwner = currentUser === post.userDocumento
 
   const handleLike = () => {
     const doc = localStorage.getItem('documento')
@@ -36,7 +45,7 @@ export default function PostCard({ post }: { post: Post }) {
       .then(data => {
         if (data) {
           setLikes(data.likes)
-          setLiked(!liked)
+          setLiked(data.isLiked ?? !liked)
         }
       })
   }
@@ -49,8 +58,26 @@ export default function PostCard({ post }: { post: Post }) {
   }
 
   useEffect(() => {
+    setLiked(post.isLikedByUser ?? post.likedByUser ?? false)
+    setLikes(post.likesCount || 0)
+  }, [post.isLikedByUser, post.likedByUser, post.likesCount])
+
+  useEffect(() => {
     if (showComments) fetchComments()
   }, [showComments])
+
+  useEffect(() => {
+    if (!showReportToast) {
+      setToastExiting(false)
+      return
+    }
+    const exitTimer = setTimeout(() => setToastExiting(true), 2000)
+    const hideTimer = setTimeout(() => setShowReportToast(false), 2500)
+    return () => {
+      clearTimeout(exitTimer)
+      clearTimeout(hideTimer)
+    }
+  }, [showReportToast])
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,6 +95,36 @@ export default function PostCard({ post }: { post: Post }) {
           setNewComment('')
           fetchComments()
         }
+      })
+  }
+
+  const handleDeletePost = () => {
+    if (!window.confirm('Tem certeza que deseja deletar este post? Esta ação não pode ser desfeita.')) {
+      return
+    }
+
+    fetch(`http://localhost:8080/api/posts/${post.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userDocumento: currentUser })
+    })
+      .then(r => {
+        if (r.ok) {
+          setShowOptionsMenu(false)
+          if (onPostDeleted) {
+            onPostDeleted(post.id)
+          }
+        } else if (r.status === 403) {
+          alert('Você não tem permissão para deletar este post')
+        } else if (r.status === 404) {
+          alert('Post não encontrado')
+        } else {
+          alert('Erro ao deletar post')
+        }
+      })
+      .catch(err => {
+        console.error('Erro ao deletar post:', err)
+        alert('Erro ao deletar post')
       })
   }
 
@@ -122,9 +179,21 @@ export default function PostCard({ post }: { post: Post }) {
             </span>
           </div>
         </div>
-        <button className="post-action-btn">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-        </button>
+        <div className="post-action-wrapper" style={{ position: 'relative' }}>
+          <button className="post-action-btn" onClick={() => setShowOptionsMenu(!showOptionsMenu)} aria-haspopup={true} aria-expanded={showOptionsMenu}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
+          {showOptionsMenu && (
+            <div className="post-options-menu">
+              <button className="post-option-btn option-interest" onClick={() => { setShowOptionsMenu(false); alert('Registrado: tenho interesse') }}>Tenho interesse</button>
+              <button className="post-option-btn option-not-interest" onClick={() => { setShowOptionsMenu(false); alert('Registrado: não tenho interesse') }}>Não tenho interesse</button>
+              <button className="post-option-btn option-report" onClick={() => { setShowOptionsMenu(false); setShowReportToast(true); }}>Denunciar</button>
+              {isOwner && (
+                <button className="post-option-btn option-delete" onClick={() => handleDeletePost()} style={{color: '#ef4444'}}>🗑️ Deletar post</button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="post-content">
@@ -182,6 +251,13 @@ export default function PostCard({ post }: { post: Post }) {
       <div className="post-time-ago">
         publicada {formatTimeAgo(post.createdAt)}
       </div>
+
+      {showReportToast && ReactDOM.createPortal(
+        <div className="toast-container" aria-live="polite">
+          <div className={`report-toast ${toastExiting ? 'toast-exit' : ''}`}>Denunciado</div>
+        </div>,
+        document.body
+      )}
 
       {showComments && (
         <div className="post-comments-section">

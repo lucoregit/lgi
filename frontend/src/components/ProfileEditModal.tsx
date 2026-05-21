@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 type Props = {
   open: boolean
   onClose: () => void
-  user: { documento?: string; nome?: string; descricao?: string; email?: string; servico?: string; especialidade?: string; formacao?: string; tempoArea?: string; valorHora?: number; emailComercial?: string } | null
+  user: { documento?: string; nome?: string; descricao?: string; email?: string; servico?: string; especialidade?: string; formacao?: string; tempoArea?: string; valorHora?: number; emailComercial?: string; cidade?: string } | null
   onSave: (u: any) => void
 }
 
@@ -16,6 +16,7 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
   const [tempoArea, setTempoArea] = useState(user?.tempoArea || '')
   const [valorHora, setValorHora] = useState(user?.valorHora?.toString() || '')
   const [emailComercial, setEmailComercial] = useState(user?.emailComercial || '')
+  const [cidade, setCidade] = useState(user?.cidade || '')
   
   const [servicesList, setServicesList] = useState<Array<{name:string, code:string}>>([])
   const [specialtiesList, setSpecialtiesList] = useState<Array<{name:string, code:string}>>([])
@@ -45,6 +46,7 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
     setTempoArea(user?.tempoArea || '')
     setValorHora(user?.valorHora?.toString() || '')
     setEmailComercial(user?.emailComercial || '')
+    setCidade(user?.cidade || '')
     setProfilePreview(localStorage.getItem('profileImageLocal'))
     setBgPreview(localStorage.getItem('bgImageLocal'))
   }, [user, open])
@@ -83,7 +85,7 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
       const resp = await fetch(`http://localhost:8080/api/user/${encodeURIComponent(user.documento)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, descricao, servico, especialidade, formacao, tempoArea, valorHora, emailComercial })
+        body: JSON.stringify({ nome, descricao, servico, especialidade, formacao, tempoArea, valorHora, emailComercial, cidade })
       })
       if (!resp.ok) throw new Error('Falha ao salvar')
       const updated = await resp.json()
@@ -158,6 +160,16 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
                 value={emailComercial} 
                 onChange={e => setEmailComercial(e.target.value)} 
                 placeholder="email@exemplo.com"
+              />
+            </div>
+
+            <div className="input-group">
+              <label>📍 Localização (Cidade)</label>
+              <input 
+                type="text" 
+                value={cidade} 
+                onChange={e => setCidade(e.target.value)} 
+                placeholder="Ex: São Paulo, Rio de Janeiro"
               />
             </div>
 

@@ -10,17 +10,18 @@ import FinanceiraTab from '../components/FinanceiraTab'
 export default function Main(){
   const [tab, setTab] = useState<'home'|'finance'|'profile'|'inicio'>('inicio')
   const [search, setSearch] = useState('')
-  const [user, setUser] = useState<{documento?:string,nome?:string,email?:string,descricao?:string,servico?:string,especialidade?:string,dataNasc?:string,formacao?:string,tempoArea?:string,valorHora?:number,qualidade?:number,credibilidade?:string,emailComercial?:string}|null>(null)
+  const [user, setUser] = useState<{documento?:string,nome?:string,email?:string,descricao?:string,servico?:string,especialidade?:string,dataNasc?:string,formacao?:string,tempoArea?:string,valorHora?:number,qualidade?:number,credibilidade?:string,emailComercial?:string,cidade?:string}|null>(null)
   const [editing, setEditing] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [posting, setPosting] = useState(false)
   const [posts, setPosts] = useState<any[]>([])
   const [userPosts, setUserPosts] = useState<any[]>([])
   const [prestadores, setPrestadores] = useState<Array<any>>([])
+  const [selectedCategory, setSelectedCategory] = useState('Todos')
 
   const fetchPosts = () => {
     const doc = localStorage.getItem('documento')
-    const url = doc ? `http://localhost:8080/api/posts?currentUser=${doc}` : 'http://localhost:8080/api/posts'
+    const url = doc ? `http://localhost:8080/api/posts?currentUser=${encodeURIComponent(doc)}` : 'http://localhost:8080/api/posts'
     fetch(url)
       .then(r => r.json())
       .then(data => setPosts(data))
@@ -30,7 +31,7 @@ export default function Main(){
   const fetchUserPosts = () => {
     const documento = localStorage.getItem('documento')
     if (!documento) return
-    fetch(`http://localhost:8080/api/posts/user/${encodeURIComponent(documento)}?currentUser=${documento}`)
+    fetch(`http://localhost:8080/api/posts/user/${encodeURIComponent(documento)}?currentUser=${encodeURIComponent(documento)}`)
       .then(r => r.json())
       .then(data => setUserPosts(data))
       .catch(err => console.error('Erro ao buscar posts do usuário:', err))
@@ -59,7 +60,12 @@ export default function Main(){
     console.log('Buscando usuário (on profile open):', documento)
     fetch(`http://localhost:8080/api/user/${encodeURIComponent(documento)}`)
       .then(r=> r.ok ? r.json() : null)
-      .then(d=> setUser(d))
+      .then(d=> { 
+        console.log('Dados do usuário carregados (profile):', d)
+        // TODO: Remover quando backend retornar 'cidade'
+        // if (d && !d.cidade) { d.cidade = 'São Paulo' }
+        setUser(d) 
+      })
       .catch(err=> { console.error('Erro ao buscar usuário (profile):', err); setUser(null) })
 
     fetch(`http://localhost:8080/api/posts/user/${encodeURIComponent(documento)}`)
@@ -79,7 +85,13 @@ export default function Main(){
         if(!r.ok) throw new Error('Não encontrado');
         return r.json()
       })
-      .then(d=> { console.log('Usuário obtido (prefetch):', d); console.log('Nome do usuário (prefetch):', d.nome); setUser(d) })
+      .then(d=> { 
+        console.log('Usuário obtido (prefetch):', d); 
+        console.log('Nome do usuário (prefetch):', d.nome)
+        // TODO: Remover quando backend retornar 'cidade'
+        // if (d && !d.cidade) { d.cidade = 'São Paulo' }
+        setUser(d) 
+      })
       .catch(err=> { console.debug('Sem usuário no prefetch:', err) })
   },[])
 
@@ -137,6 +149,17 @@ export default function Main(){
       </span>
     )
   }
+
+  const filteredPrestadores = prestadores.filter(p => {
+    const matchesCategory = selectedCategory === 'Todos' || (p.service && p.service.toLowerCase() === selectedCategory.toLowerCase())
+    const term = search.toLowerCase().trim()
+    const matchesSearch = !term || (
+      (p.name && p.name.toLowerCase().includes(term)) ||
+      (p.service && p.service.toLowerCase().includes(term)) ||
+      (p.description && p.description.toLowerCase().includes(term))
+    )
+    return matchesCategory && matchesSearch
+  })
 
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark')
 
@@ -216,29 +239,52 @@ export default function Main(){
             {posts.length > 0 ? (
               posts.map(p => <PostCard key={p.id} post={p} />)
             ) : (
-              <div className="empty-state">
-                <p>Nenhuma postagem ainda. Seja o primeiro!</p>
+              <div className="premium-empty-state">
+                <div className="empty-state-icon">✨</div>
+                <h3>O feed está silencioso</h3>
+                <p>Seja o primeiro a compartilhar uma postagem ou novidade com a comunidade LGI!</p>
+                <button className="new-post-btn-sm" onClick={() => setPosting(true)}>
+                  Criar Publicação
+                </button>
               </div>
             )}
           </div>
         )}
 
         {tab === 'home' && (
-          <div>
-            <div className="feed-grid">
-              {prestadores.map(p=> (
-                <CardPrestador
-                  key={p.id}
-                  id={p.id}
-                  name={p.name}
-                  description={p.description}
-                  service={p.service}
-                  cover={p.cover}
-                  avatar={p.avatar}
-                  rating={p.rating}
-                />
+          <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
+            <div className="filter-chips-container">
+              {['Todos', 'Eletricista', 'Encanador', 'Pintor', 'TI'].map(cat => (
+                <button
+                  key={cat}
+                  className={`filter-chip ${selectedCategory === cat ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(cat)}
+                >
+                  {cat}
+                </button>
               ))}
             </div>
+
+            {filteredPrestadores.length > 0 ? (
+              <div className="feed-grid">
+                {filteredPrestadores.map(p=> (
+                  <CardPrestador
+                    key={p.id}
+                    id={p.id}
+                    name={p.name}
+                    description={p.description}
+                    service={p.service}
+                    cover={p.cover}
+                    avatar={p.avatar}
+                    rating={p.rating}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <p>Nenhum prestador encontrado para essa categoria.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -276,6 +322,10 @@ export default function Main(){
                     <h4>Ficha Técnica</h4>
                   </div>
                   <div className="stats-grid">
+                    <div className="stat-item">
+                      <span className="stat-label">📍 Localização</span>
+                      <span className="stat-value">{(() => { console.log('DEBUG - user:', user); console.log('DEBUG - user.cidade:', user?.cidade); return user?.cidade || '--'; })()}</span>
+                    </div>
                     <div className="stat-item">
                       <span className="stat-label">Idade</span>
                       <span className="stat-value">{calculateAge(user?.dataNasc) || '--'} anos</span>
