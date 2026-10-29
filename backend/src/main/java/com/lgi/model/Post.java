@@ -14,7 +14,7 @@ public class Post {
     @Column(name = "user_documento")
     private String userDocumento;
 
-    @Column(name = "media_content", columnDefinition = "LONGTEXT")
+    @Column(name = "media_content", columnDefinition = "TEXT")
     private String mediaContent;
 
     @Column(name = "media_type")

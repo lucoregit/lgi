@@ -211,17 +211,13 @@ feira/
 ### Pré-requisitos
 - **Java 17 JDK** instalado e configurado no PATH.
 - **Node.js 18+** e **npm**.
-- **MySQL Server 8.x** em execução na porta `3306`.
+- A senha do banco PostgreSQL do projeto no Supabase.
 - **Apache Maven 3.8+** (ou utilizar o wrapper da sua IDE).
 
 ### 1. Configurar o Banco de Dados
-Certifique-se de que o MySQL está rodando. O arquivo `backend/src/main/resources/application.properties` está configurado por padrão para:
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/feira_db?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci
-spring.datasource.username=root
-spring.datasource.password=sua_senha
-```
-> O `DatabaseInitializer` cria o banco e popula as especialidades na primeira execução automaticamente através do script `seed.sql`.
+Crie um arquivo `.env` na raiz do projeto com `SUPABASE_DB_PASSWORD=sua-senha-do-banco`. Esse arquivo é ignorado pelo Git; o Spring Boot o carrega ao iniciar a partir da pasta `backend`, e o Docker Compose o usa automaticamente.
+
+O backend conecta diretamente ao PostgreSQL do Supabase usando SSL. A senha é lida do ambiente e não deve ser adicionada ao repositório. O script `backend/src/main/resources/db/seed.sql` usa sintaxe MySQL; seus dados iniciais não são compatíveis com PostgreSQL sem conversão.
 
 ### 2. Iniciar o Backend
 Abra um terminal na pasta do backend:
