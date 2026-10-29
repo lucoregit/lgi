@@ -8,7 +8,12 @@ echo.
 
 cd /d "%~dp0"
 
-echo [1/2] Construindo e iniciando containers (Backend + Frontend)...
+echo [1/3] Criando atalho na Area de Trabalho com o icone do LGI...
+if exist "criar_atalho.vbs" (
+    cscript //nologo "%~dp0criar_atalho.vbs" > nul 2>&1
+)
+
+echo [2/3] Construindo e iniciando containers (Backend + Frontend)...
 docker compose up -d --build
 
 if %errorlevel% neq 0 (
@@ -19,17 +24,24 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [2/2] Aguardando servidores inicializarem...
+echo [3/3] Aguardando servidores e banco H2 inicializarem...
 timeout /t 5 /nobreak > nul
 
 echo.
-echo Abrindo sistema no navegador...
+echo Abrindo sistema no seu navegador padrao...
 start http://localhost
 
 echo.
 echo ====================================================
 echo  TUDO PRONTO! O LGI esta rodando no Docker.
+echo.
 echo  Acesse: http://localhost ou http://localhost:3000
+echo.
+echo  DICA: Foi criado o atalho 'LGI - Iniciar Sistema' na
+echo  sua Area de Trabalho com o icone do LGI.
+echo  Clique com o botao direito nele e escolha:
+echo  'Fixar na barra de tarefas' para iniciar sempre com 1 clique!
+echo.
 echo  Para parar: execute 'parar_docker.bat'
 echo ====================================================
-timeout /t 3 /nobreak > nul
+timeout /t 4 /nobreak > nul

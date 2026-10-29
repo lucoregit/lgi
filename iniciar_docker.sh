@@ -29,3 +29,4 @@ echo "===================================================="
 echo " TUDO PRONTO! Acesse: http://localhost"
 echo " Para parar: ./parar_docker.sh"
 echo "===================================================="
+

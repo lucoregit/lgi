@@ -14,3 +14,4 @@ echo ====================================================
 echo  [OK] Containers finalizados com sucesso!
 echo ====================================================
 timeout /t 2 /nobreak > nul
+
