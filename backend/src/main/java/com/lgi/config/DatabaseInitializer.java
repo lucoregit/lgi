@@ -22,28 +22,30 @@ public class DatabaseInitializer implements CommandLineRunner {
     public void run(String... args) {
         boolean alreadySeeded = false;
         try {
-            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM servico", Integer.class);
+            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM login", Integer.class);
             if (count != null && count > 0) {
                 alreadySeeded = true;
             }
         } catch (Exception e) {
-            // Table doesn't exist or is empty
+            // Table doesn't exist yet or is empty
         }
 
         if (!alreadySeeded) {
             try {
-                System.out.println("DatabaseInitializer: Seeding database from seed.sql...");
+                System.out.println("DatabaseInitializer: Populando banco de dados inicial a partir de seed.sql...");
                 ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+                populator.setContinueOnError(true);
+                populator.setIgnoreFailedDrops(true);
                 populator.addScript(new ClassPathResource("db/seed.sql"));
                 try (Connection connection = Objects.requireNonNull(jdbcTemplate.getDataSource()).getConnection()) {
                     populator.populate(connection);
                 }
-                System.out.println("DatabaseInitializer: Database seeded successfully!");
+                System.out.println("DatabaseInitializer: Banco de dados populado com sucesso!");
             } catch (Exception e) {
-                System.err.println("DatabaseInitializer: Error seeding database: " + e.getMessage());
+                System.err.println("DatabaseInitializer: Erro ao popular banco: " + e.getMessage());
             }
         } else {
-            System.out.println("DatabaseInitializer: Database already seeded.");
+            System.out.println("DatabaseInitializer: Banco ja contem dados cadastrados.");
         }
     }
 }
