@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import PasswordRecoveryModal from '../components/PasswordRecoveryModal'
 import logoImage from '../assets/LGI-brandlogo.png'
 
 export default function Login(){
-  const [cred, setCred] = useState('')
-  const [senha, setSenha] = useState('')
+  const location = useLocation()
+  const loginState = location.state as { credenciais?: string; senha?: string } | null
+  const [cred, setCred] = useState(loginState?.credenciais || '')
+  const [senha, setSenha] = useState(loginState?.senha || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showRecovery, setShowRecovery] = useState(false)
@@ -15,7 +17,7 @@ export default function Login(){
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('http://localhost:8080/api/login', {
+      const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credenciais: cred, senha })
@@ -111,4 +113,5 @@ export default function Login(){
     </div>
   )
 }
+
 

@@ -8,6 +8,7 @@ import com.lgi.repository.CommentRepository;
 import com.lgi.repository.LoginRepository;
 import com.lgi.repository.LikeRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,14 @@ public class PostController {
         List<Post> posts = postRepository.findByUserDocumentoOrderByCreatedAtDesc(documento);
         posts.forEach(p -> populatePostData(p, currentUser));
         return posts;
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Post> getPostById(@PathVariable Long id, @RequestParam(required = false) String currentUser) {
+        return postRepository.findById(id).map(p -> {
+            populatePostData(p, currentUser);
+            return ResponseEntity.ok(p);
+        }).orElse(ResponseEntity.notFound().build());
     }
 
     private void populatePostData(Post post, String currentUser) {
@@ -136,20 +145,21 @@ public class PostController {
     }
 
     @DeleteMapping("/{id}")
+    @Transactional
     public ResponseEntity<?> deletePost(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String userDoc = body.get("userDocumento");
         if (userDoc == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "userDocumento obrigatório"));
         }
 
-        return postRepository.findById(id).map(post -> {
-            if (!post.getUserDocumento().equals(userDoc)) {
+        return postRepository.findUserDocumentoById(id).map(postUserDoc -> {
+            if (!postUserDoc.equals(userDoc)) {
                 return ResponseEntity.status(403).body(Map.of("error", "Você não tem permissão para deletar este post"));
             }
 
             commentRepository.deleteByPostId(id);
             likeRepository.deleteByPostId(id);
-            postRepository.delete(post);
+            postRepository.deleteById(id);
 
             return ResponseEntity.ok(Map.of("message", "Post deletado com sucesso"));
         }).orElse(ResponseEntity.notFound().build());

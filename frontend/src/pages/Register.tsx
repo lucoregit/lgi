@@ -1,4 +1,4 @@
-Ôªøimport React, { useState } from 'react'
+import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import logoImage from '../assets/LGI-brandlogo.png'
 
@@ -28,14 +28,28 @@ export default function Register() {
     setSuccess('')
 
     if (senha !== senha2) {
-      setError('As senhas n√£o coincidem')
+      setError('As senhas n„o coincidem')
       return
     }
 
     setLoading(true)
 
     try {
-      const res = await fetch('http://localhost:8080/api/register', {
+      // Client-side age validation
+      if (dataNasc) {
+        const birth = new Date(dataNasc)
+        const now = new Date()
+        let age = now.getFullYear() - birth.getFullYear()
+        const m = now.getMonth() - birth.getMonth()
+        if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--
+        if (age < 18 || age > 100) {
+          setError('Idade deve ser entre 18 e 100 anos')
+          setLoading(false)
+          return
+        }
+      }
+
+      const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, documento, dataNasc, email, senha } as RegisterPayload),
@@ -47,10 +61,10 @@ export default function Register() {
         return
       }
 
-      setSuccess('Conta criada com sucesso! Voc√™ ser√° redirecionado para o login.')
-      setTimeout(() => navigate('/'), 1200)
+      setSuccess('Conta criada com sucesso! VocÍ ser· redirecionado para o login.')
+      setTimeout(() => navigate('/', { state: { credenciais: email || documento, senha } }), 1200)
     } catch (err) {
-      setError('Erro de conex√£o com o servidor')
+      setError('Erro de conex„o com o servidor')
     } finally {
       setLoading(false)
     }
@@ -104,6 +118,9 @@ export default function Register() {
               onChange={e => setDataNasc(e.target.value)}
               type="date"
               required
+              // limit date to [today-100y, today-18y]
+              max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
+              min={new Date(new Date().setFullYear(new Date().getFullYear() - 100)).toISOString().split('T')[0]}
             />
           </div>
         </div>
@@ -161,3 +178,5 @@ export default function Register() {
     </div>
   )
 }
+
+

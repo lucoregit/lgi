@@ -60,6 +60,9 @@ public class Login {
     @Column(name = "telefone_log")
     private String telefone;
 
+    @Column(name = "loc_log")
+    private String cidade;
+
     @Column(name = "recovery_code")
     private String recoveryCode;
 
@@ -186,6 +189,14 @@ public class Login {
 
     public void setTelefone(String telefone) {
         this.telefone = telefone;
+    }
+
+    public String getCidade() {
+        return cidade;
+    }
+
+    public void setCidade(String cidade) {
+        this.cidade = cidade;
     }
 
     public String getRecoveryCode() {

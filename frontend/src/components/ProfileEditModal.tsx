@@ -29,7 +29,7 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
   // Carregar lista de serviços ao abrir
   useEffect(() => {
     if (open) {
-      fetch('http://localhost:8080/api/services')
+      fetch('/api/services')
         .then(r => r.json())
         .then(data => setServicesList(Array.isArray(data) ? data : []))
         .catch(err => console.error('Erro ao buscar serviços:', err))
@@ -47,8 +47,11 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
     setValorHora(user?.valorHora?.toString() || '')
     setEmailComercial(user?.emailComercial || '')
     setCidade(user?.cidade || '')
-    setProfilePreview(localStorage.getItem('profileImageLocal'))
-    setBgPreview(localStorage.getItem('bgImageLocal'))
+    // Use per-user localStorage keys to avoid sharing images between different accounts
+    const profileKey = user?.documento ? `profileImageLocal_${user.documento}` : null
+    const bgKey = user?.documento ? `bgImageLocal_${user.documento}` : null
+    setProfilePreview(profileKey ? localStorage.getItem(profileKey) : null)
+    setBgPreview(bgKey ? localStorage.getItem(bgKey) : null)
   }, [user, open])
 
   // Carregar especialidades quando o serviço muda
@@ -60,7 +63,7 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
 
     const selectedService = servicesList.find(s => s.name === servico)
     if (selectedService) {
-      fetch(`http://localhost:8080/api/specialties/${selectedService.code}`)
+      fetch(`/api/specialties/${selectedService.code}`)
         .then(r => r.json())
         .then(data => setSpecialtiesList(Array.isArray(data) ? data : []))
         .catch(err => console.error('Erro ao buscar especialidades:', err))
@@ -82,7 +85,7 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
   const submit = async () => {
     if (!user?.documento) return
     try {
-      const resp = await fetch(`http://localhost:8080/api/user/${encodeURIComponent(user.documento)}`, {
+      const resp = await fetch(`/api/user/${encodeURIComponent(user.documento)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, descricao, servico, especialidade, formacao, tempoArea, valorHora, emailComercial, cidade })
@@ -90,8 +93,13 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
       if (!resp.ok) throw new Error('Falha ao salvar')
       const updated = await resp.json()
       
-      if (profilePreview) localStorage.setItem('profileImageLocal', profilePreview)
-      if (bgPreview) localStorage.setItem('bgImageLocal', bgPreview)
+      // Persist images per-user (key includes documento). Don't write global keys.
+      if (user?.documento) {
+        const profileKey = `profileImageLocal_${user.documento}`
+        const bgKey = `bgImageLocal_${user.documento}`
+        if (profilePreview) localStorage.setItem(profileKey, profilePreview)
+        if (bgPreview) localStorage.setItem(bgKey, bgPreview)
+      }
       
       onSave(updated)
       onClose()
@@ -256,3 +264,5 @@ export default function ProfileEditModal({ open, onClose, user, onSave }: Props)
     </div>
   )
 }
+
+

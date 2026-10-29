@@ -10,9 +10,11 @@ type Props = {
   rating: number
   service?: string
   description?: string
+  qualidade?: number
+  credibilidade?: string
 }
 
-export default function CardPrestador({ id, name, cover, avatar, rating, service, description }: Props){
+export default function CardPrestador({ id, name, cover, avatar, rating, service, description, qualidade, credibilidade }: Props){
   const navigate = useNavigate()
   const stars = Array.from({length:5}).map((_,i)=> i < Math.round(rating) ? '★' : '☆')
 
@@ -36,10 +38,29 @@ export default function CardPrestador({ id, name, cover, avatar, rating, service
           {stars.join(' ')}
         </div>
 
+        {(qualidade !== undefined || credibilidade) && (
+          <div className="card-qual-cred">
+            {qualidade !== undefined && (
+              <span className="card-qual-stars">
+                {[1,2,3,4,5].map(s => (
+                  <span key={s} className={s <= Math.round(qualidade || 0) ? 'star filled' : 'star'}>★</span>
+                ))}
+              </span>
+            )}
+            {credibilidade && (
+              <span className={`cred-badge ${credibilidade.toLowerCase()}`}>
+                {credibilidade}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="card-actions">
-          <button className="card-btn" onClick={()=> navigate(`/prestador/${id}`, { state: { provider: { id, name, cover, avatar, rating, service, description } } })}>Ver</button>
+          <button className="card-btn" onClick={()=> navigate(`/prestador/${id}`, { state: { provider: { id, name, cover, avatar, rating, service, description, qualidade, credibilidade } } })}>Ver</button>
         </div>
       </div>
     </article>
   )
 }
+
+

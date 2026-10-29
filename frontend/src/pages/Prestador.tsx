@@ -9,10 +9,22 @@ export default function Prestador(){
   const [provider, setProvider] = useState<any>((loc.state as any)?.provider || null)
   const [loading, setLoading] = useState(!provider)
   const [posts, setPosts] = useState<any[]>([])
+  const [contratarOpen, setContratarOpen] = useState(false)
+  const [specialties, setSpecialties] = useState<{code:string, name:string}[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [submitMsg, setSubmitMsg] = useState('')
+  const [form, setForm] = useState({
+    servico: '',
+    data: '',
+    hora: '',
+    localizacao: '',
+    preco: '',
+    obs: ''
+  })
 
   const fetchUserPosts = (userId: string) => {
     const doc = localStorage.getItem('documento')
-    const url = doc ? `http://localhost:8080/api/posts/user/${encodeURIComponent(userId)}?currentUser=${doc}` : `http://localhost:8080/api/posts/user/${encodeURIComponent(userId)}`
+    const url = doc ? `/api/posts/user/${encodeURIComponent(userId)}?currentUser=${doc}` : `/api/posts/user/${encodeURIComponent(userId)}`
     fetch(url)
       .then(r => r.json())
       .then(data => {
@@ -28,7 +40,7 @@ export default function Prestador(){
   useEffect(() => {
     if (id) {
       setLoading(true)
-      fetch(`http://localhost:8080/api/user/${encodeURIComponent(id)}`)
+      fetch(`/api/user/${encodeURIComponent(id)}`)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (data) {
@@ -46,8 +58,10 @@ export default function Prestador(){
                 credibilidade: data.credibilidade,
                 emailComercial: data.emailComercial,
                 email: data.email,
-                avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.nome)}&background=random&color=fff&size=256`,
-                cover: 'https://images.unsplash.com/photo-1503264116251-35a269479413?q=80&w=1400&auto=format&fit=crop&ixlib=rb-4.0.3&s=1',
+                cidade: data.cidade,
+                // prefer locally-uploaded images (if present in this browser)
+                avatar: (localStorage.getItem(`profileImageLocal_${data.documento}`)) || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.nome)}&background=random&color=fff&size=256`,
+                cover: (localStorage.getItem(`bgImageLocal_${data.documento}`)) || 'https://images.unsplash.com/photo-1503264116251-35a269479413?q=80&w=1400&auto=format&fit=crop&ixlib=rb-4.0.3&s=1',
                 rating: data.qualidade || 5
               })
           }
@@ -57,6 +71,92 @@ export default function Prestador(){
       fetchUserPosts(id)
     }
   }, [id])
+
+  useEffect(() => {
+    const serviceName = provider?.service
+    if (serviceName) {
+      fetch('/api/services')
+        .then(r => r.ok ? r.json() : [])
+        .then((services: any[]) => {
+          const match = (Array.isArray(services) ? services : []).find(
+            (s: any) => (s.name || s.classe_serv || '').toLowerCase().trim() === serviceName.toLowerCase().trim()
+          )
+          if (match?.code) {
+            return fetch(`/api/specialties/${match.code}`)
+              .then(r => r.ok ? r.json() : [])
+          }
+          return []
+        })
+        .then((data: any[]) => {
+          setSpecialties(Array.isArray(data) ? data.map((s: any) => ({ code: String(s.code || ''), name: String(s.name || '') })).filter((s: {code:string, name:string}) => s.code && s.name) : [])
+        })
+        .catch(() => setSpecialties([]))
+    } else {
+      fetch('/api/services')
+        .then(r => r.ok ? r.json() : [])
+        .then((data: any[]) => {
+          setSpecialties(Array.isArray(data) ? data.map((s: any) => ({ code: String(s.code || ''), name: String(s.name || s.classe_serv || '') })).filter((s: {code:string, name:string}) => s.code && s.name) : [])
+        })
+        .catch(() => setSpecialties([]))
+    }
+  }, [provider?.id, provider?.service])
+
+  const openContratar = () => {
+    setForm({
+      servico: '',
+      data: '',
+      hora: '',
+      localizacao: '',
+      preco: provider?.valorHora ? provider.valorHora.toFixed(2) : '',
+      obs: ''
+    })
+    setSubmitMsg('')
+    setContratarOpen(true)
+  }
+
+  const handleContratar = () => {
+    if (!form.servico || !form.data || !form.hora || !form.localizacao) {
+      setSubmitMsg('Preencha todos os campos obrigatórios.')
+      return
+    }
+    setSubmitting(true)
+    setSubmitMsg('')
+
+    const documento = localStorage.getItem('documento')
+    if (!documento) {
+      setSubmitMsg('Você precisa estar logado para contratar.')
+      setSubmitting(false)
+      return
+    }
+
+    fetch('/api/appointments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client: documento,
+        service: form.servico,
+        date: form.data,
+        time: form.hora,
+        localizacao: form.localizacao,
+        price: form.preco,
+        obs: form.obs,
+        prestador: id
+      })
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Erro ao solicitar serviço')
+        return r.json()
+      })
+      .then(() => {
+        setSubmitMsg('Solicitação enviada com sucesso!')
+        setSubmitting(false)
+        setTimeout(() => setContratarOpen(false), 1500)
+      })
+      .catch(err => {
+        setSubmitMsg(err.message)
+        setSubmitting(false)
+      })
+  }
 
   const handlePostDeleted = (postId: number) => {
     setPosts(posts.filter(p => p.id !== postId))
@@ -99,13 +199,14 @@ export default function Prestador(){
 
   return (
     <div className="main-page">
-      <header className="main-header">
-        <button className="back-btn-simple" onClick={() => navigate(-1)} style={{position:'absolute', left:12, top:12, background:'transparent', border:'none', cursor:'pointer', color:'var(--text)'}}>
+      <header className="main-header prestador-header">
+        <button className="back-btn-simple prestador-back-btn" onClick={() => navigate(-1)} aria-label="Voltar">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         </button>
-        <div className="header-title" style={{textAlign:'center'}}>
+        <div className="header-title prestador-header-title">
           <h2>Perfil</h2>
         </div>
+        <div className="prestador-header-spacer" aria-hidden="true" />
       </header>
 
       <div className="content" style={{padding:16}}>
@@ -132,7 +233,7 @@ export default function Prestador(){
                 <div className="stats-grid">
                   <div className="stat-item">
                     <span className="stat-label">📍 Localização</span>
-                    <span className="stat-value muted">Não informada</span>
+                    <span className={provider.cidade ? 'stat-value' : 'stat-value muted'}>{provider.cidade || 'Não informada'}</span>
                   </div>
                   <div className="stat-item">
                     <span className="stat-label">Idade</span>
@@ -164,51 +265,118 @@ export default function Prestador(){
                   </div>
                 </div>
               </div>
+
+              <button className="contratar-btn" onClick={openContratar}>
+                Contratar
+              </button>
             </div>
           </div>
+
+          {contratarOpen && (
+            <div className="modal-overlay" role="dialog" aria-modal="true" onClick={(e) => e.target === e.currentTarget && setContratarOpen(false)}>
+              <div className="modal-container contratar-modal">
+                <div className="modal-header-premium">
+                  <h3>Contratar Serviço</h3>
+                  <button className="close-btn" onClick={() => setContratarOpen(false)}>&times;</button>
+                </div>
+                <div className="modal-body">
+                  <div className="contratar-form">
+                    <div className="input-group">
+                      <label>Serviço</label>
+                      <select
+                        className="select-premium"
+                        value={form.servico}
+                        onChange={e => setForm({...form, servico: e.target.value})}
+                      >
+                        <option value="">Selecione um serviço</option>
+                        {specialties.map(s => (
+                          <option key={s.code} value={s.code}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="input-group">
+                      <label>Data</label>
+                      <input
+                        className="input"
+                        type="date"
+                        value={form.data}
+                        min={new Date().toISOString().split('T')[0]}
+                        onChange={e => setForm({...form, data: e.target.value})}
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label>Horário</label>
+                      <input
+                        className="input"
+                        type="time"
+                        value={form.hora}
+                        onChange={e => setForm({...form, hora: e.target.value})}
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label>Localização</label>
+                      <input
+                        className="input"
+                        type="text"
+                        placeholder="Onde será realizado o serviço"
+                        value={form.localizacao}
+                        onChange={e => setForm({...form, localizacao: e.target.value})}
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label>Preço (R$)</label>
+                      <input
+                        className="input"
+                        type="number"
+                        step="0.01"
+                        value={form.preco}
+                        onChange={e => setForm({...form, preco: e.target.value})}
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label>Observações</label>
+                      <textarea
+                        className="input"
+                        rows={3}
+                        placeholder="Alguma observação?"
+                        value={form.obs}
+                        onChange={e => setForm({...form, obs: e.target.value})}
+                      />
+                    </div>
+
+                    {submitMsg && (
+                      <div className={`contratar-msg ${submitMsg.includes('sucesso') ? 'success' : 'error'}`}>
+                        {submitMsg}
+                      </div>
+                    )}
+                    <button className="contratar-submit-btn" onClick={handleContratar} disabled={submitting}>
+                      {submitting ? 'Enviando...' : 'Solicitar Contratação'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="profile-posts-section">
             <h4>Publicações</h4>
             <div className="profile-posts-grid">
               {posts.length > 0 ? (
-                posts.map(p => {
-                  const currentUserDoc = localStorage.getItem('documento')
-                  const isOwner = currentUserDoc === p.userDocumento
-
-                  if (isOwner) {
-                    return (
-                      <div key={p.id} style={{ gridColumn: '1 / -1' }}>
-                        <PostCard post={p} onPostDeleted={handlePostDeleted} />
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <div
-                      key={p.id}
-                      className="profile-post-thumb"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate(`/posts/${p.id}`)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          navigate(`/posts/${p.id}`)
-                        }
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {p.mediaType === 'image' ? (
-                        <img src={p.mediaContent} alt="Post" />
-                      ) : (
-                        <div className="video-thumb">
-                          <video src={p.mediaContent} />
-                          <div className="video-icon">▶</div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })
+                posts.map(p => (
+                  <div key={p.id}>
+                    <PostCard
+                      post={p}
+                      onPostDeleted={handlePostDeleted}
+                      canDelete={false}
+                      onOpenPost={() => navigate(`/posts/${p.id}`)}
+                    />
+                  </div>
+                ))
               ) : (
                 <p className="empty-msg">Este usuário ainda não tem publicações.</p>
               )}
@@ -219,3 +387,5 @@ export default function Prestador(){
     </div>
   )
 }
+
+

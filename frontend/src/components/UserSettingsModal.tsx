@@ -39,7 +39,7 @@ export default function UserSettingsModal({ open, onClose, user }: Props) {
 
   const handleVerifyCurrent = async () => {
     try {
-      const resp = await fetch('http://localhost:8080/api/verify-password', {
+      const resp = await fetch('/api/verify-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credenciais: currentEmail, senha: currentPassword })
@@ -70,7 +70,7 @@ export default function UserSettingsModal({ open, onClose, user }: Props) {
     }
     
     try {
-      const resp = await fetch('http://localhost:8080/api/update-password', {
+      const resp = await fetch('/api/update-password', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credenciais: currentEmail, novaSenha: newPassword })
@@ -290,3 +290,5 @@ export default function UserSettingsModal({ open, onClose, user }: Props) {
     </div>
   )
 }
+
+

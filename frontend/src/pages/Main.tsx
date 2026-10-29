@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import BottomNav from '../components/BottomNav'
 import ProfileEditModal from '../components/ProfileEditModal'
 import PostModal from '../components/PostModal'
@@ -17,11 +18,18 @@ export default function Main(){
   const [posts, setPosts] = useState<any[]>([])
   const [userPosts, setUserPosts] = useState<any[]>([])
   const [prestadores, setPrestadores] = useState<Array<any>>([])
+  const navigate = useNavigate()
   const [selectedCategory, setSelectedCategory] = useState('Todos')
+  const [serviceOptions, setServiceOptions] = useState<string[]>([])
+  const [selectedQualidade, setSelectedQualidade] = useState(0)
+  const [selectedCredibilidade, setSelectedCredibilidade] = useState<string>('Todas')
+  const [catFilterOpen, setCatFilterOpen] = useState(false)
+  const [qualFilterOpen, setQualFilterOpen] = useState(false)
+  const [credFilterOpen, setCredFilterOpen] = useState(false)
 
   const fetchPosts = () => {
     const doc = localStorage.getItem('documento')
-    const url = doc ? `http://localhost:8080/api/posts?currentUser=${encodeURIComponent(doc)}` : 'http://localhost:8080/api/posts'
+    const url = doc ? `/api/posts?currentUser=${encodeURIComponent(doc)}` : '/api/posts'
     fetch(url)
       .then(r => r.json())
       .then(data => setPosts(data))
@@ -31,7 +39,7 @@ export default function Main(){
   const fetchUserPosts = () => {
     const documento = localStorage.getItem('documento')
     if (!documento) return
-    fetch(`http://localhost:8080/api/posts/user/${encodeURIComponent(documento)}?currentUser=${encodeURIComponent(documento)}`)
+    fetch(`/api/posts/user/${encodeURIComponent(documento)}?currentUser=${encodeURIComponent(documento)}`)
       .then(r => r.json())
       .then(data => setUserPosts(data))
       .catch(err => console.error('Erro ao buscar posts do usuário:', err))
@@ -58,17 +66,15 @@ export default function Main(){
     const documento = localStorage.getItem('documento')
     if(!documento) return
     console.log('Buscando usuário (on profile open):', documento)
-    fetch(`http://localhost:8080/api/user/${encodeURIComponent(documento)}`)
+    fetch(`/api/user/${encodeURIComponent(documento)}`)
       .then(r=> r.ok ? r.json() : null)
       .then(d=> { 
         console.log('Dados do usuário carregados (profile):', d)
-        // TODO: Remover quando backend retornar 'cidade'
-        // if (d && !d.cidade) { d.cidade = 'São Paulo' }
         setUser(d) 
       })
       .catch(err=> { console.error('Erro ao buscar usuário (profile):', err); setUser(null) })
 
-    fetch(`http://localhost:8080/api/posts/user/${encodeURIComponent(documento)}`)
+    fetch(`/api/posts/user/${encodeURIComponent(documento)}`)
       .then(r => r.json())
       .then(data => setUserPosts(data))
       .catch(err => console.error('Erro ao buscar posts do usuário:', err))
@@ -79,7 +85,7 @@ export default function Main(){
     const documento = localStorage.getItem('documento')
     if(!documento) return
     console.log('Prefetch usuário no mount:', documento)
-    fetch(`http://localhost:8080/api/user/${encodeURIComponent(documento)}`)
+    fetch(`/api/user/${encodeURIComponent(documento)}`)
       .then(r=>{
         console.log('prefetch response status:', r.status)
         if(!r.ok) throw new Error('Não encontrado');
@@ -88,8 +94,6 @@ export default function Main(){
       .then(d=> { 
         console.log('Usuário obtido (prefetch):', d); 
         console.log('Nome do usuário (prefetch):', d.nome)
-        // TODO: Remover quando backend retornar 'cidade'
-        // if (d && !d.cidade) { d.cidade = 'São Paulo' }
         setUser(d) 
       })
       .catch(err=> { console.debug('Sem usuário no prefetch:', err) })
@@ -98,7 +102,20 @@ export default function Main(){
   useEffect(()=>{
     // buscar provedores do backend quando abrir a aba Procurar (home)
     if(tab !== 'home') return
-    fetch('http://localhost:8080/api/providers')
+    fetch('/api/services')
+      .then(r=>{ if(!r.ok) throw new Error('Erro ao buscar serviços'); return r.json() })
+      .then((data:any[])=>{
+        const services = Array.isArray(data)
+          ? data.map(s => String(s.name || s.classe_serv || '').trim()).filter(Boolean)
+          : []
+        setServiceOptions(Array.from(new Set(services)))
+      })
+      .catch(err=>{
+        console.error('Erro ao carregar serviços:', err)
+        setServiceOptions(['Eletricista', 'Encanador', 'Pintor', 'TI'])
+      })
+
+    fetch('/api/providers')
       .then(r=>{ if(!r.ok) throw new Error('Erro ao buscar providers'); return r.json() })
       .then((data:any[])=>{
         // anexa imagens placeholder aos registros
@@ -114,12 +131,15 @@ export default function Main(){
         ]
         const mapped = data.map((p, i)=> ({
           id: p.documento,
-          name: p.nome,
+          name: p.nome || p.name || '',
           description: p.descricao || '',
           service: p.servico || '',
-          cover: covers[i % covers.length],
-          avatar: avatars[i % avatars.length],
-          rating: 4
+          qualidade: p.qualidade != null ? Number(p.qualidade) : 0,
+          credibilidade: p.credibilidade || 'Pendente',
+          // prefer per-user stored cover/avatar if available in localStorage
+          cover: (localStorage.getItem(`bgImageLocal_${p.documento}`)) || covers[i % covers.length],
+          avatar: (localStorage.getItem(`profileImageLocal_${p.documento}`)) || avatars[i % avatars.length],
+          rating: p.qualidade != null ? Number(p.qualidade) : 4
         }))
         setPrestadores(mapped)
       })
@@ -150,16 +170,29 @@ export default function Main(){
     )
   }
 
+  const normalizeSearchText = (value?: string | number) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+
   const filteredPrestadores = prestadores.filter(p => {
-    const matchesCategory = selectedCategory === 'Todos' || (p.service && p.service.toLowerCase() === selectedCategory.toLowerCase())
-    const term = search.toLowerCase().trim()
+    const providerName = p.name || p.nome || ''
+    const matchesCategory = selectedCategory === 'Todos' || normalizeSearchText(p.service) === normalizeSearchText(selectedCategory)
+    const term = normalizeSearchText(search)
     const matchesSearch = !term || (
-      (p.name && p.name.toLowerCase().includes(term)) ||
-      (p.service && p.service.toLowerCase().includes(term)) ||
-      (p.description && p.description.toLowerCase().includes(term))
+      normalizeSearchText(providerName).includes(term) ||
+      normalizeSearchText(p.service).includes(term) ||
+      normalizeSearchText(p.description).includes(term)
     )
-    return matchesCategory && matchesSearch
+    const matchesQualidade = selectedQualidade === 0 || (p.qualidade || 0) >= selectedQualidade
+    const matchesCredibilidade = selectedCredibilidade === 'Todas' || normalizeSearchText(p.credibilidade) === normalizeSearchText(selectedCredibilidade)
+    return matchesCategory && matchesSearch && matchesQualidade && matchesCredibilidade
   })
+
+  const baseServiceOptions = serviceOptions.length > 0 ? serviceOptions : ['Eletricista', 'Encanador', 'Pintor', 'TI']
+  const jobFilterOptions = ['Todos', ...baseServiceOptions]
 
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark')
 
@@ -253,16 +286,89 @@ export default function Main(){
 
         {tab === 'home' && (
           <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-            <div className="filter-chips-container">
-              {['Todos', 'Eletricista', 'Encanador', 'Pintor', 'TI'].map(cat => (
+            <div className={`filter-chips-container ${catFilterOpen || qualFilterOpen || credFilterOpen ? 'no-clip' : ''}`}>
+              {['Todos', selectedCategory !== 'Todos' ? selectedCategory : ''].filter(Boolean).map(cat => (
                 <button
                   key={cat}
+                  type="button"
                   className={`filter-chip ${selectedCategory === cat ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(cat)}
+                  onClick={() => { setSelectedCategory(cat); setCatFilterOpen(false) }}
                 >
                   {cat}
                 </button>
               ))}
+
+              <div className="filter-dropdown-wrapper">
+                <button
+                  type="button"
+                  className={`filter-chip job-filters-open-btn ${selectedCategory !== 'Todos' ? 'active' : ''}`}
+                  onClick={() => { setQualFilterOpen(false); setCredFilterOpen(false); setCatFilterOpen(!catFilterOpen) }}
+                >
+                  {selectedCategory !== 'Todos' ? selectedCategory : 'Categoria'} ▾
+                </button>
+                {catFilterOpen && (
+                  <div className="filter-dropdown">
+                    {jobFilterOptions.map(option => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={`filter-dropdown-item ${selectedCategory === option ? 'active' : ''}`}
+                        onClick={() => { setSelectedCategory(option); setCatFilterOpen(false) }}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="filter-dropdown-wrapper">
+                <button
+                  type="button"
+                  className={`filter-chip job-filters-open-btn ${selectedQualidade > 0 ? 'active' : ''}`}
+                  onClick={() => { setCatFilterOpen(false); setCredFilterOpen(false); setQualFilterOpen(!qualFilterOpen) }}
+                >
+                  {selectedQualidade > 0 ? `★≥${selectedQualidade}` : 'Qualidade'} ▾
+                </button>
+                {qualFilterOpen && (
+                  <div className="filter-dropdown">
+                    {[0, 1, 2, 3, 4, 5].map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`filter-dropdown-item ${selectedQualidade === n ? 'active' : ''}`}
+                        onClick={() => { setSelectedQualidade(n); setQualFilterOpen(false) }}
+                      >
+                        {n === 0 ? 'Todas' : '★ ≥ ' + n}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="filter-dropdown-wrapper">
+                <button
+                  type="button"
+                  className={`filter-chip job-filters-open-btn ${selectedCredibilidade !== 'Todas' ? 'active' : ''}`}
+                  onClick={() => { setCatFilterOpen(false); setQualFilterOpen(false); setCredFilterOpen(!credFilterOpen) }}
+                >
+                  {selectedCredibilidade !== 'Todas' ? (selectedCredibilidade === 'Media' ? 'Média' : selectedCredibilidade) : 'Credibilidade'} ▾
+                </button>
+                {credFilterOpen && (
+                  <div className="filter-dropdown">
+                    {['Todas', 'Alta', 'Media', 'Pendente', 'Verificado'].map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`filter-dropdown-item ${selectedCredibilidade === c ? 'active' : ''}`}
+                        onClick={() => { setSelectedCredibilidade(c); setCredFilterOpen(false) }}
+                      >
+                        {c === 'Media' ? 'Média' : c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {filteredPrestadores.length > 0 ? (
@@ -277,12 +383,14 @@ export default function Main(){
                     cover={p.cover}
                     avatar={p.avatar}
                     rating={p.rating}
+                    qualidade={p.qualidade}
+                    credibilidade={p.credibilidade}
                   />
                 ))}
               </div>
             ) : (
               <div className="empty-state">
-                <p>Nenhum prestador encontrado para essa categoria.</p>
+                <p>Nenhum prestador encontrado com os filtros atuais.</p>
               </div>
             )}
           </div>
@@ -296,14 +404,17 @@ export default function Main(){
           <div className="profile-view">
             <div 
               className="profile-bg" 
-              style={{ backgroundImage: localStorage.getItem('bgImageLocal') ? `url(${localStorage.getItem('bgImageLocal')})` : undefined }}
+              style={{
+                // read per-user bg key; fall back to undefined if not present
+                backgroundImage: (localStorage.getItem(`bgImageLocal_${localStorage.getItem('documento') || user?.documento}`)) ? `url(${localStorage.getItem(`bgImageLocal_${localStorage.getItem('documento') || user?.documento}`)})` : undefined
+              }}
               aria-hidden="true"
             ></div>
 
             <div className="profile-meta">
               <img 
                 className="profile-photo" 
-                src={localStorage.getItem('profileImageLocal') || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.nome || 'U')}&background=fff&color=333&size=256`} 
+                  src={(localStorage.getItem(`profileImageLocal_${localStorage.getItem('documento') || user?.documento}`)) || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.nome || 'U')}&background=fff&color=333&size=256`} 
                 alt="Foto de perfil" 
               />
               <div className="profile-info">
@@ -324,7 +435,7 @@ export default function Main(){
                   <div className="stats-grid">
                     <div className="stat-item">
                       <span className="stat-label">📍 Localização</span>
-                      <span className="stat-value">{(() => { console.log('DEBUG - user:', user); console.log('DEBUG - user.cidade:', user?.cidade); return user?.cidade || '--'; })()}</span>
+                      <span className="stat-value">{user?.cidade || '--'}</span>
                     </div>
                     <div className="stat-item">
                       <span className="stat-label">Idade</span>
@@ -364,15 +475,14 @@ export default function Main(){
               <div className="profile-posts-grid">
                 {userPosts.length > 0 ? (
                   userPosts.map(p => (
-                    <div key={p.id} className="profile-post-thumb">
-                      {p.mediaType === 'image' ? (
-                        <img src={p.mediaContent} alt="Post" />
-                      ) : (
-                        <div className="video-thumb">
-                          <video src={p.mediaContent} />
-                          <div className="video-icon">▶</div>
-                        </div>
-                      )}
+                    <div key={p.id}>
+                      <PostCard
+                        post={p}
+                        onPostDeleted={(id) => setUserPosts(userPosts.filter(up => up.id !== id))}
+                        isProfilePost={true}
+                        canDelete={true}
+                        onOpenPost={() => navigate(`/posts/${p.id}`)}
+                      />
                     </div>
                   ))
                 ) : (
@@ -396,3 +506,5 @@ export default function Main(){
     </div>
   )
 }
+
+

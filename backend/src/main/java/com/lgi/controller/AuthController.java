@@ -6,8 +6,6 @@ import java.util.Map;
 import java.util.Random;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
-import java.net.URI;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -59,6 +57,7 @@ public class AuthController {
         resp.put("credibilidade", l.getCredibilidade());
         resp.put("emailComercial", l.getEmailComercial());
         resp.put("telefone", l.getTelefone());
+        resp.put("cidade", l.getCidade());
         if(l.getDescricao() != null){
             resp.put("descricao", l.getDescricao());
         }
@@ -70,17 +69,18 @@ public class AuthController {
         // prefer using JdbcTemplate to gracefully handle missing optional columns
         try{
             try{
-                var rows = jdbcTemplate.queryForList("SELECT documento_log AS documento, nome_log AS nome, descr_log AS descricao, serviço_log AS servico FROM login");
+                var rows = jdbcTemplate.queryForList("SELECT documento_log AS documento, nome_log AS nome, descr_log AS descricao, servi\u00E7o_log AS servico, qualidade_log AS qualidade, credibilidade_log AS credibilidade FROM login");
                 return ResponseEntity.ok(rows);
             }catch(DataAccessException ex){
-                // fallback if servico_log doesn't exist
+                // fallback if optional columns don't exist
                 var rows = jdbcTemplate.queryForList("SELECT documento_log AS documento, nome_log AS nome, descr_log AS descricao FROM login");
-                // map to include empty servico
                 var list = new java.util.ArrayList<java.util.Map<String,Object>>();
                 for(var r : rows){
                     java.util.Map<String,Object> m = new java.util.HashMap<>();
                     m.putAll(r);
                     m.put("servico", "");
+                    m.put("qualidade", null);
+                    m.put("credibilidade", null);
                     list.add(m);
                 }
                 return ResponseEntity.ok(list);
@@ -118,11 +118,6 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Autenticado", "documento", saved.getDocumento()));
     }
 
-    @GetMapping("/")
-    public ResponseEntity<?> rootRedirect(){
-        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create("http://localhost:3000")).build();
-    }
-
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Map<String, String> body){
         // Validação básica
@@ -153,7 +148,13 @@ public class AuthController {
             l.setDocumento(documento);
             l.setNome(nome);
             try{
-                l.setDataNasc(LocalDate.parse(data));
+                LocalDate parsed = LocalDate.parse(data);
+                // validate age between 18 and 100
+                long years = java.time.Period.between(parsed, LocalDate.now()).getYears();
+                if (years < 18 || years > 100) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Idade deve ser entre 18 e 100 anos"));
+                }
+                l.setDataNasc(parsed);
             }catch(Exception ex){
                 return ResponseEntity.badRequest().body(Map.of("error", "Formato de data inválido. Use YYYY-MM-DD"));
             }
@@ -185,6 +186,8 @@ public class AuthController {
         String tempoArea = body.get("tempoArea");
         String valorHoraStr = body.get("valorHora");
         String emailComercial = body.get("emailComercial");
+        String cidade = body.get("cidade");
+        if(cidade == null) cidade = body.get("localizacao");
 
         if(nome != null) l.setNome(nome);
         if(descricao != null) l.setDescricao(descricao);
@@ -193,6 +196,7 @@ public class AuthController {
         if(formacao != null) l.setFormacao(formacao);
         if(tempoArea != null) l.setTempoArea(tempoArea);
         if(emailComercial != null) l.setEmailComercial(emailComercial);
+        if(cidade != null) l.setCidade(cidade);
         if(valorHoraStr != null) {
             try {
                 l.setValorHora(Double.parseDouble(valorHoraStr));
@@ -214,7 +218,27 @@ public class AuthController {
         resp.put("credibilidade", saved.getCredibilidade());
         resp.put("emailComercial", saved.getEmailComercial());
         resp.put("telefone", saved.getTelefone());
+        resp.put("cidade", saved.getCidade());
         if(saved.getDescricao()!=null) resp.put("descricao", saved.getDescricao());
+        return ResponseEntity.ok(resp);
+    }
+
+    @PutMapping("/user/{documento}/location")
+    public ResponseEntity<?> updateUserLocation(@PathVariable String documento, @RequestBody Map<String,String> body){
+        var opt = loginRepository.findById(documento);
+        if(opt.isEmpty()) return ResponseEntity.notFound().build();
+
+        String cidade = body.get("cidade");
+        if(cidade == null) cidade = body.get("localizacao");
+        if(cidade == null) return ResponseEntity.badRequest().body(Map.of("error", "Campo 'cidade' é obrigatório"));
+
+        Login l = opt.get();
+        l.setCidade(cidade);
+        Login saved = loginRepository.save(l);
+
+        java.util.Map<String,Object> resp = new java.util.HashMap<>();
+        resp.put("documento", saved.getDocumento());
+        resp.put("cidade", saved.getCidade());
         return ResponseEntity.ok(resp);
     }
 
@@ -283,6 +307,35 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Código de recuperação enviado para o email " + user.getEmail()));
     }
 
+    // ADMIN: fix ages for existing users — set to 18 years old when outside allowed range
+    @PostMapping("/admin/fix-ages")
+    public ResponseEntity<?> fixAges() {
+        try {
+            var all = loginRepository.findAll();
+            LocalDate now = LocalDate.now();
+            LocalDate default18 = now.minusYears(18);
+            int updated = 0;
+            for (Login l : all) {
+                LocalDate dn = l.getDataNasc();
+                boolean change = false;
+                if (dn == null) {
+                    change = true;
+                } else {
+                    long years = java.time.Period.between(dn, now).getYears();
+                    if (years < 18 || years > 100) change = true;
+                }
+                if (change) {
+                    l.setDataNasc(default18);
+                    loginRepository.save(l);
+                    updated++;
+                }
+            }
+            return ResponseEntity.ok(Map.of("updated", updated));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/verify-recovery-code")
     public ResponseEntity<?> verifyRecoveryCode(@RequestBody Map<String, String> body) {
         String cred = body.getOrDefault("credenciais", "").trim();
@@ -344,7 +397,7 @@ public class AuthController {
     @GetMapping("/services")
     public ResponseEntity<?> listAllServices() {
         try {
-            var rows = jdbcTemplate.queryForList("SELECT classe_serv AS name, cod_serv AS code FROM serviço ORDER BY classe_serv ASC");
+            var rows = jdbcTemplate.queryForList("SELECT classe_serv AS name, cod_serv AS code FROM servico ORDER BY classe_serv ASC");
             return ResponseEntity.ok(rows);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
@@ -354,7 +407,7 @@ public class AuthController {
     @GetMapping("/specialties/{serviceCode}")
     public ResponseEntity<?> listSpecialties(@PathVariable String serviceCode) {
         try {
-            var rows = jdbcTemplate.queryForList("SELECT cod_serv1 AS code, descr_serv1 AS name FROM serviço1 WHERE cod2_serv1 = ? ORDER BY descr_serv1 ASC", serviceCode);
+            var rows = jdbcTemplate.queryForList("SELECT cod_serv1 AS code, descr_serv1 AS name FROM servico1 WHERE cod2_serv1 = ? ORDER BY descr_serv1 ASC", serviceCode);
             return ResponseEntity.ok(rows);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));

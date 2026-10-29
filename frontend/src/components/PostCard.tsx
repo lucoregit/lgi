@@ -15,7 +15,7 @@ type Post = {
   createdAt: string
 }
 
-export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDeleted?: (postId: number) => void }) {
+export default function PostCard({ post, onPostDeleted, isProfilePost = false, canDelete = false, onOpenPost }: { post: Post, onPostDeleted?: (postId: number) => void, isProfilePost?: boolean, canDelete?: boolean, onOpenPost?: () => void }) {
   const navigate = useNavigate()
   const initialLiked = post.isLikedByUser ?? post.likedByUser ?? false
   const [liked, setLiked] = useState(initialLiked)
@@ -25,18 +25,40 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
   const [showOptionsMenu, setShowOptionsMenu] = useState(false)
-  const [showReportToast, setShowReportToast] = useState(false)
-  const [toastExiting, setToastExiting] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportReasons, setReportReasons] = useState<string[]>([])
+  const [reportComment, setReportComment] = useState('')
+  const [reportSubmitted, setReportSubmitted] = useState(false)
+  const [isReporting, setIsReporting] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const currentUser = localStorage.getItem('documento')
   const isOwner = currentUser === post.userDocumento
+  const showDeleteOption = canDelete && isOwner
+
+  // Fechar menu ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      const optionsButton = target.closest('.post-action-wrapper')
+      if (!optionsButton && showOptionsMenu) {
+        setShowOptionsMenu(false)
+      }
+    }
+
+    if (showOptionsMenu) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [showOptionsMenu])
 
   const handleLike = () => {
     const doc = localStorage.getItem('documento')
     if (!doc) return // Não permite curtir se não estiver logado
 
     const endpoint = liked ? 'unlike' : 'like'
-    fetch(`http://localhost:8080/api/posts/${post.id}/${endpoint}`, { 
+    fetch(`/api/posts/${post.id}/${endpoint}`, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userDocumento: doc })
@@ -51,7 +73,7 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
   }
 
   const fetchComments = () => {
-    fetch(`http://localhost:8080/api/posts/${post.id}/comments`)
+    fetch(`/api/posts/${post.id}/comments`)
       .then(r => r.json())
       .then(data => setComments(data))
       .catch(err => console.error('Erro ao buscar comentários:', err))
@@ -66,25 +88,42 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
     if (showComments) fetchComments()
   }, [showComments])
 
-  useEffect(() => {
-    if (!showReportToast) {
-      setToastExiting(false)
-      return
-    }
-    const exitTimer = setTimeout(() => setToastExiting(true), 2000)
-    const hideTimer = setTimeout(() => setShowReportToast(false), 2500)
-    return () => {
-      clearTimeout(exitTimer)
-      clearTimeout(hideTimer)
-    }
-  }, [showReportToast])
+  const REPORT_REASONS = [
+    'Conteúdo inapropriado ou ofensivo',
+    'Spam ou publicidade enganosa',
+    'Informações falsas ou enganosas',
+    'Assédio ou comportamento abusivo',
+    'Violação de direitos autorais',
+  ]
+
+  const toggleReason = (reason: string) => {
+    setReportReasons(prev =>
+      prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]
+    )
+  }
+
+  const handleSubmitReport = () => {
+    if (reportReasons.length === 0) return
+    setIsReporting(true)
+    // Simulação de envio — substituir por fetch real quando o endpoint existir
+    setTimeout(() => {
+      setIsReporting(false)
+      setReportSubmitted(true)
+      setTimeout(() => {
+        setShowReportModal(false)
+        setReportReasons([])
+        setReportComment('')
+        setReportSubmitted(false)
+      }, 1800)
+    }, 800)
+  }
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault()
     const documento = localStorage.getItem('documento')
     if (!documento || !newComment.trim()) return
 
-    fetch(`http://localhost:8080/api/posts/${post.id}/comments`, {
+    fetch(`/api/posts/${post.id}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userDocumento: documento, content: newComment })
@@ -99,33 +138,42 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
   }
 
   const handleDeletePost = () => {
-    if (!window.confirm('Tem certeza que deseja deletar este post? Esta ação não pode ser desfeita.')) {
-      return
-    }
+    setShowDeleteModal(true)
+    setShowOptionsMenu(false)
+  }
 
-    fetch(`http://localhost:8080/api/posts/${post.id}`, {
+  const confirmDeletePost = () => {
+    if (!currentUser) return
+
+    setIsDeleting(true)
+    fetch(`/api/posts/${post.id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userDocumento: currentUser })
     })
       .then(r => {
         if (r.ok) {
-          setShowOptionsMenu(false)
+          setShowDeleteModal(false)
           if (onPostDeleted) {
             onPostDeleted(post.id)
           }
         } else if (r.status === 403) {
           alert('Você não tem permissão para deletar este post')
+          setShowDeleteModal(false)
         } else if (r.status === 404) {
           alert('Post não encontrado')
+          setShowDeleteModal(false)
         } else {
           alert('Erro ao deletar post')
+          setShowDeleteModal(false)
         }
       })
       .catch(err => {
         console.error('Erro ao deletar post:', err)
         alert('Erro ao deletar post')
+        setShowDeleteModal(false)
       })
+      .finally(() => setIsDeleting(false))
   }
 
   const handleProfileClick = () => {
@@ -159,7 +207,7 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
   }
 
   return (
-    <div className="post-card-premium">
+    <div className={`post-card-premium${onOpenPost ? ' clickable-card' : ''}`} onClick={onOpenPost ? () => onOpenPost() : undefined}>
       <div className="post-header">
         <div className="post-user-meta">
           <img 
@@ -167,29 +215,32 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
             alt="User" 
             className="post-user-avatar"
             style={{ cursor: 'pointer' }}
-            onClick={handleProfileClick}
+            onClick={e => { e.stopPropagation(); handleProfileClick() }}
           />
           <div className="post-user-info">
             <span 
               className="post-user-name" 
               style={{ cursor: 'pointer' }}
-              onClick={handleProfileClick}
+              onClick={e => { e.stopPropagation(); handleProfileClick() }}
             >
               {post.userName || post.userDocumento}
             </span>
           </div>
         </div>
         <div className="post-action-wrapper" style={{ position: 'relative' }}>
-          <button className="post-action-btn" onClick={() => setShowOptionsMenu(!showOptionsMenu)} aria-haspopup={true} aria-expanded={showOptionsMenu}>
+          <button className="post-action-btn" onClick={e => { e.stopPropagation(); setShowOptionsMenu(!showOptionsMenu) }} aria-haspopup={true} aria-expanded={showOptionsMenu}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
           </button>
           {showOptionsMenu && (
             <div className="post-options-menu">
-              <button className="post-option-btn option-interest" onClick={() => { setShowOptionsMenu(false); alert('Registrado: tenho interesse') }}>Tenho interesse</button>
-              <button className="post-option-btn option-not-interest" onClick={() => { setShowOptionsMenu(false); alert('Registrado: não tenho interesse') }}>Não tenho interesse</button>
-              <button className="post-option-btn option-report" onClick={() => { setShowOptionsMenu(false); setShowReportToast(true); }}>Denunciar</button>
-              {isOwner && (
-                <button className="post-option-btn option-delete" onClick={() => handleDeletePost()} style={{color: '#ef4444'}}>🗑️ Deletar post</button>
+              {showDeleteOption ? (
+                <button className="post-option-btn option-delete" onClick={e => { e.stopPropagation(); handleDeletePost() }} style={{color: '#ef4444'}}>🗑️ Deletar post</button>
+              ) : (
+                <>
+                  <button className="post-option-btn option-interest" onClick={e => { e.stopPropagation(); setShowOptionsMenu(false); alert('Registrado: tenho interesse') }}>Tenho interesse</button>
+                  <button className="post-option-btn option-not-interest" onClick={e => { e.stopPropagation(); setShowOptionsMenu(false); alert('Registrado: não tenho interesse') }}>Não tenho interesse</button>
+                  <button className="post-option-btn option-report" onClick={e => { e.stopPropagation(); setShowOptionsMenu(false); setShowReportModal(true); }}>Denunciar</button>
+                </>
               )}
             </div>
           )}
@@ -205,12 +256,12 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
       </div>
 
       <div className="post-actions">
-        <button className="post-action-btn" onClick={handleLike}>
+        <button className="post-action-btn" onClick={e => { e.stopPropagation(); handleLike() }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill={liked ? "#ef4444" : "none"} stroke={liked ? "#ef4444" : "currentColor"} strokeWidth="2">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
           </svg>
         </button>
-        <button className="post-action-btn" onClick={() => setShowComments(!showComments)}>
+        <button className="post-action-btn" onClick={e => { e.stopPropagation(); setShowComments(!showComments) }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
           </svg>
@@ -220,8 +271,7 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
             <path d="M17 2l4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" />
           </svg>
         </button>
-        <button className="post-action-btn" onClick={() => {
-          const shareData = {
+        <button className="post-action-btn" onClick={e => { e.stopPropagation(); const shareData = {
             title: 'Confira este post no LGI',
             text: post.descricao,
             url: window.location.origin + '/post/' + post.id
@@ -252,9 +302,90 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
         publicada {formatTimeAgo(post.createdAt)}
       </div>
 
-      {showReportToast && ReactDOM.createPortal(
-        <div className="toast-container" aria-live="polite">
-          <div className={`report-toast ${toastExiting ? 'toast-exit' : ''}`}>Denunciado</div>
+      {showReportModal && ReactDOM.createPortal(
+        <div className="modal-overlay" onClick={() => !isReporting && !reportSubmitted && setShowReportModal(false)}>
+          <div className="report-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+            {reportSubmitted ? (
+              <div className="report-success">
+                <div className="report-success-icon">✓</div>
+                <p>Denúncia enviada com sucesso!</p>
+                <span>Agradecemos por ajudar a manter a comunidade segura.</span>
+              </div>
+            ) : (
+              <>
+                <div className="report-modal-header">
+                  <div className="report-modal-title-group">
+                    <span className="report-modal-icon">⚑</span>
+                    <h3 id="report-modal-title">Denunciar publicação</h3>
+                  </div>
+                  <button className="modal-close-btn" onClick={() => setShowReportModal(false)} aria-label="Fechar">✕</button>
+                </div>
+                <div className="report-modal-body">
+                  <p className="report-modal-subtitle">Selecione os motivos da denúncia (pode escolher mais de um):</p>
+                  <div className="report-reasons-list">
+                    {REPORT_REASONS.map(reason => (
+                      <label key={reason} className={`report-reason-item${reportReasons.includes(reason) ? ' selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          className="report-reason-checkbox"
+                          checked={reportReasons.includes(reason)}
+                          onChange={() => toggleReason(reason)}
+                        />
+                        <span className="report-reason-checkmark">{reportReasons.includes(reason) ? '✓' : ''}</span>
+                        <span className="report-reason-label">{reason}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="report-comment-section">
+                    <label className="report-comment-label" htmlFor={`report-comment-${post.id}`}>Descrição adicional (opcional)</label>
+                    <textarea
+                      id={`report-comment-${post.id}`}
+                      className="report-comment-textarea"
+                      placeholder="Descreva com mais detalhes o motivo da denúncia..."
+                      value={reportComment}
+                      onChange={e => setReportComment(e.target.value)}
+                      rows={3}
+                      maxLength={500}
+                    />
+                    <span className="report-comment-counter">{reportComment.length}/500</span>
+                  </div>
+                </div>
+                <div className="report-modal-footer">
+                  <button className="report-modal-btn cancel" onClick={() => setShowReportModal(false)} disabled={isReporting}>Cancelar</button>
+                  <button
+                    className="report-modal-btn submit"
+                    onClick={handleSubmitReport}
+                    disabled={reportReasons.length === 0 || isReporting}
+                  >
+                    {isReporting ? 'Enviando...' : 'Enviar denúncia'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showDeleteModal && ReactDOM.createPortal(
+        <div className="modal-overlay" onClick={() => !isDeleting && setShowDeleteModal(false)}>
+          <div className="delete-modal" onClick={e => e.stopPropagation()}>
+            <div className="delete-modal-header">
+              <h3>Deletar publicação</h3>
+              <button className="modal-close-btn" onClick={() => setShowDeleteModal(false)} disabled={isDeleting} aria-label="Fechar">✕</button>
+            </div>
+            <div className="delete-modal-body">
+              <p>Tem certeza que deseja deletar esta publicação? Esta ação não pode ser desfeita.</p>
+            </div>
+            <div className="delete-modal-footer">
+              <button className="delete-modal-btn cancel" onClick={() => setShowDeleteModal(false)} disabled={isDeleting}>
+                Cancelar
+              </button>
+              <button className="delete-modal-btn confirm" onClick={confirmDeletePost} disabled={isDeleting}>
+                {isDeleting ? 'Deletando...' : 'Deletar'}
+              </button>
+            </div>
+          </div>
         </div>,
         document.body
       )}
@@ -268,7 +399,7 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
             </div>
           ))}
           
-          <form className="comment-input-wrapper" onSubmit={handleAddComment}>
+          <form className="comment-input-wrapper" onSubmit={e => { e.stopPropagation(); handleAddComment(e) }}>
             <input 
               className="comment-input" 
               placeholder="Adicione um comentário..." 
@@ -284,3 +415,5 @@ export default function PostCard({ post, onPostDeleted }: { post: Post, onPostDe
     </div>
   )
 }
+
+

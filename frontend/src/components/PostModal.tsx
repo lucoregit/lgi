@@ -57,7 +57,7 @@ export default function PostModal({ open, onClose, userDocumento, onPostCreated 
 
     setLoading(true)
     try {
-      const res = await fetch('http://localhost:8080/api/posts', {
+      const res = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -145,3 +145,5 @@ export default function PostModal({ open, onClose, userDocumento, onPostCreated 
     </div>
   )
 }
+
+

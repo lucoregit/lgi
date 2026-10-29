@@ -17,7 +17,7 @@ export default function PasswordRecoveryModal({ onClose }: PasswordRecoveryModal
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8080/api/forgot-password', {
+      const res = await fetch('/api/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credenciais: cred })
@@ -40,7 +40,7 @@ export default function PasswordRecoveryModal({ onClose }: PasswordRecoveryModal
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8080/api/verify-recovery-code', {
+      const res = await fetch('/api/verify-recovery-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credenciais: cred, code })
@@ -62,7 +62,7 @@ export default function PasswordRecoveryModal({ onClose }: PasswordRecoveryModal
     setError('');
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8080/api/reset-password-recovery', {
+      const res = await fetch('/api/reset-password-recovery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credenciais: cred, code, novaSenha: newPassword })
@@ -150,3 +150,5 @@ export default function PasswordRecoveryModal({ onClose }: PasswordRecoveryModal
     </div>
   );
 }
+
+
